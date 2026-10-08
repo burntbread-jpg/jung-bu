@@ -13,6 +13,22 @@ function validTableId(value: unknown) {
   return Number.isInteger(id) && id >= 1 && id <= 15 ? id : null;
 }
 
+function truncate(value: unknown, length: number) {
+  return Array.from(String(value ?? "").trim()).slice(0, length).join("");
+}
+
+async function validOperator(request: Request) {
+  const expected = env.OPERATOR_PIN;
+  const provided = request.headers.get("X-Operator-Pin") ?? "";
+  if (!expected || !provided) return false;
+  const encoder = new TextEncoder();
+  const [expectedHash, providedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+  ]);
+  return new Uint8Array(expectedHash).every((byte, index) => byte === new Uint8Array(providedHash)[index]);
+}
+
 async function readState(database: D1Database): Promise<EventState> {
   const row = await database.prepare("SELECT current_round, status, round_started_at FROM event_state WHERE id = 1").first<{ current_round: number; status: EventState["status"]; round_started_at: string | null }>();
   if (!row) return { currentRound: 1, status: "ready", roundStartedAt: null };
@@ -56,20 +72,35 @@ export async function POST(request: Request) {
     const database = db();
     const state = await readState(database);
 
+    if (action === "verify_operator") {
+      if (!env.OPERATOR_PIN) return Response.json({ error: "운영자 PIN이 아직 설정되지 않았습니다." }, { status: 503 });
+      if (!(await validOperator(request))) return Response.json({ error: "운영자 PIN이 올바르지 않습니다." }, { status: 401 });
+      return Response.json({ ok: true });
+    }
+
+    const protectedActions = new Set(["start", "next", "pause", "end", "reset", "material", "raffle"]);
+    if (protectedActions.has(action) && !(await validOperator(request))) {
+      return Response.json({ error: "운영자 인증이 필요합니다." }, { status: 401 });
+    }
+
     if (action === "attend") {
       const tableId = validTableId(payload.tableId);
       if (!tableId) return Response.json({ error: "테이블 번호를 확인해 주세요." }, { status: 400 });
       if (state.status !== "active") return Response.json({ error: "현재 참석을 받는 회차가 아닙니다." }, { status: 409 });
+      const inserted = await database.prepare(
+        `INSERT INTO attendance (table_id, round)
+         SELECT ?, ?
+         WHERE (SELECT COUNT(*) FROM attendance WHERE round = ? AND table_id = ?) < ?`,
+      ).bind(tableId, state.currentRound, state.currentRound, tableId, CAPACITY).run();
+      if (!inserted.meta.changes) return Response.json({ error: "이 테이블은 정원이 찼습니다." }, { status: 409 });
       const countRow = await database.prepare("SELECT COUNT(*) AS count FROM attendance WHERE round = ? AND table_id = ?").bind(state.currentRound, tableId).first<{ count: number }>();
-      const count = Number(countRow?.count ?? 0);
-      if (count >= CAPACITY) return Response.json({ error: "이 테이블은 정원이 찼습니다." }, { status: 409 });
-      await database.prepare("INSERT INTO attendance (table_id, round) VALUES (?, ?)").bind(tableId, state.currentRound).run();
-      return Response.json({ ok: true, count: count + 1, remaining: CAPACITY - count - 1 });
+      const count = Math.min(Number(countRow?.count ?? 0), CAPACITY);
+      return Response.json({ ok: true, count, remaining: CAPACITY - count });
     }
 
     if (action === "feedback") {
-      const message = String(payload.message ?? "").trim().slice(0, 240);
-      const name = String(payload.name ?? "").trim().slice(0, 30) || "익명";
+      const message = truncate(payload.message, 240);
+      const name = truncate(payload.name, 30) || "익명";
       if (!message) return Response.json({ error: "참여 소감을 입력해 주세요." }, { status: 400 });
       await database.prepare("INSERT INTO feedback (name, message) VALUES (?, ?)").bind(name, message).run();
       return Response.json({ ok: true });
@@ -97,15 +128,17 @@ export async function POST(request: Request) {
       await database.batch([
         database.prepare("DELETE FROM attendance"),
         database.prepare("DELETE FROM feedback"),
-        database.prepare("UPDATE event_state SET current_round = 1, status = 'ready', round_started_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = 1"),
+        database.prepare(`INSERT INTO event_state (id, current_round, status, round_started_at, updated_at) VALUES (1, 1, 'ready', NULL, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET current_round = 1, status = 'ready', round_started_at = NULL, updated_at = CURRENT_TIMESTAMP`),
       ]);
       return Response.json({ ok: true });
     }
 
     if (action === "material") {
       const tableId = validTableId(payload.tableId);
-      const url = String(payload.url ?? "").trim().slice(0, 500);
-      if (!tableId || !/^https?:\/\//i.test(url)) return Response.json({ error: "테이블과 http(s) 자료 주소를 확인해 주세요." }, { status: 400 });
+      const url = truncate(payload.url, 500);
+      let validUrl = false;
+      try { validUrl = ["http:", "https:"].includes(new URL(url).protocol); } catch { validUrl = false; }
+      if (!tableId || !validUrl) return Response.json({ error: "테이블과 http(s) 자료 주소를 확인해 주세요." }, { status: 400 });
       await database.prepare(`INSERT INTO material_links (table_id, url, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(table_id) DO UPDATE SET url = excluded.url, updated_at = CURRENT_TIMESTAMP`).bind(tableId, url).run();
       return Response.json({ ok: true });
     }
