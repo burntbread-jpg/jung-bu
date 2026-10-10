@@ -29,10 +29,23 @@ async function ensureSchema(sql: SqlClient) {
         id bigserial PRIMARY KEY,
         table_id integer NOT NULL CHECK (table_id BETWEEN 1 AND 15),
         round integer NOT NULL CHECK (round BETWEEN 1 AND 3),
-        slot integer NOT NULL CHECK (slot BETWEEN 1 AND 10),
+        slot integer NOT NULL CHECK (slot BETWEEN 1 AND 7),
         created_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE (round, table_id, slot)
       )`,
+      tx`DELETE FROM attendance WHERE slot > 7`,
+      tx`DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'attendance_slot_check'
+              AND pg_get_constraintdef(oid) LIKE '%10%'
+          ) THEN
+            ALTER TABLE attendance DROP CONSTRAINT attendance_slot_check;
+            ALTER TABLE attendance ADD CONSTRAINT attendance_slot_check CHECK (slot BETWEEN 1 AND 7);
+          END IF;
+        END
+      $$`,
       tx`CREATE INDEX IF NOT EXISTS idx_attendance_round_table ON attendance (round, table_id)`,
       tx`CREATE TABLE IF NOT EXISTS feedback (
         id bigserial PRIMARY KEY,

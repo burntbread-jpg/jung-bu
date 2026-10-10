@@ -3,7 +3,7 @@ import { getDatabase } from "@/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CAPACITY = 10;
+const CAPACITY = 7;
 type Sql = Awaited<ReturnType<typeof getDatabase>>;
 type EventState = { currentRound: number; status: "ready" | "active" | "break" | "ended"; roundStartedAt: string | null };
 

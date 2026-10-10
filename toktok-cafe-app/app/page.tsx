@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Clock3, ExternalLink, Gift, LayoutGrid, MessageCircle, MonitorCog, RotateCcw, Users } from "lucide-react";
+import { BookOpen, Check, Clock3, ExternalLink, Gift, LayoutGrid, Maximize2, MessageCircle, Minimize2, MonitorCog, RotateCcw, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -30,7 +31,7 @@ type EventData = {
   serverTime: string;
 };
 
-const EMPTY: EventData = { state: { currentRound: 1, status: "ready", roundStartedAt: null }, capacity: 10, counts: {}, feedback: [], materials: {}, serverTime: new Date().toISOString() };
+const EMPTY: EventData = { state: { currentRound: 1, status: "ready", roundStartedAt: null }, capacity: 7, counts: {}, feedback: [], materials: {}, serverTime: new Date().toISOString() };
 
 async function send(action: string, payload: Record<string, unknown> = {}, operatorPin?: string) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -63,6 +64,7 @@ export default function Home() {
   const [connected, setConnected] = useState(true);
   const [serverOffset, setServerOffset] = useState(0);
   const [confirmAction, setConfirmAction] = useState<"reset" | "end" | null>(null);
+  const [timerExpanded, setTimerExpanded] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -90,6 +92,15 @@ export default function Home() {
     };
     tick(); const id = window.setInterval(tick, 1000); return () => window.clearInterval(id);
   }, [data.state.roundStartedAt, data.state.status, serverOffset]);
+
+  useEffect(() => {
+    if (!timerExpanded) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setTimerExpanded(false); };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); };
+  }, [timerExpanded]);
 
   const act = useCallback(async (action: string, payload: Record<string, unknown> = {}, success?: string, pin?: string) => {
     setBusy(true);
@@ -122,7 +133,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div><p className="eyebrow">2026 수업 나눔의 달</p><h1>수업나눔 톡톡!카페</h1></div>
+        <div className="topbar-brand"><span className="header-logo"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={271} height={91} priority /></span><div><p className="eyebrow">2026 수업 나눔의 날</p><h1>수업나눔 톡톡!카페</h1></div></div>
         <div className="round-panel" aria-live="polite"><span>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</span><strong>{data.state.status === "active" ? `${mm}:${ss}` : "20:00"}</strong></div>
       </header>
 
@@ -140,7 +151,7 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="tablet" className="content-panel tablet-view">
-          <section className="tablet-card"><p className="eyebrow">테이블 태블릿 화면</p><h2>참여할 테이블을 선택하세요</h2><Select value={selectedTable} onValueChange={setSelectedTable}><SelectTrigger className="table-select"><SelectValue /></SelectTrigger><SelectContent>{TOPICS.map((topic, i) => <SelectItem key={topic} value={String(i + 1)}>{i + 1}. {topic}</SelectItem>)}</SelectContent></Select><div className="selected-topic"><span>TABLE {String(selectedTable).padStart(2, "0")}</span><strong>{TOPICS[Number(selectedTable) - 1]}</strong><p><b>{selectedRemaining}</b>자리 남았습니다</p></div><Button className="attend-button" disabled={busy || selectedRemaining === 0 || data.state.status !== "active"} onClick={() => void act("attend", { tableId: Number(selectedTable) }, "참석이 등록되었습니다.")}><Users />{selectedRemaining === 0 ? "정원이 찼습니다" : data.state.status === "active" ? "참석하기" : "회차 시작을 기다려 주세요"}</Button><p className="helper">한 사람이 누를 때마다 잔여 좌석이 1석 줄어듭니다.</p></section>
+          <section className="tablet-card"><p className="eyebrow">테이블 태블릿 화면</p><h2>참여할 테이블을 미리 선택하세요</h2><p className="tablet-intro">1회차 시작 전에도 테이블을 골라둘 수 있으며, 회차가 진행 중이면 늦게 도착해도 바로 참석할 수 있습니다.</p><Select value={selectedTable} onValueChange={setSelectedTable}><SelectTrigger className="table-select"><SelectValue /></SelectTrigger><SelectContent>{TOPICS.map((topic, i) => <SelectItem key={topic} value={String(i + 1)}>{i + 1}. {topic}</SelectItem>)}</SelectContent></Select><div className="selected-topic"><span>TABLE {String(selectedTable).padStart(2, "0")}</span><strong>{TOPICS[Number(selectedTable) - 1]}</strong><p><b>{selectedRemaining}</b>자리 남았습니다</p></div><Button className="attend-button" disabled={busy || selectedRemaining === 0 || data.state.status !== "active"} onClick={() => void act("attend", { tableId: Number(selectedTable) }, "참석이 등록되었습니다.")}><Users />{selectedRemaining === 0 ? "정원이 찼습니다" : data.state.status === "active" ? "이 테이블에 참석하기" : "테이블 선택 완료 · 시작 후 참석 가능"}</Button><p className="helper">행사가 진행 중인 동안에는 언제든 참석 버튼을 누를 수 있습니다.</p></section>
         </TabsContent>
 
         <TabsContent value="materials" className="content-panel">
@@ -155,11 +166,15 @@ export default function Home() {
 
         <TabsContent value="control" className="content-panel control-layout">
           <section className="operator-login"><div><p className="eyebrow">운영자 보호</p><strong>{operatorVerified ? "운영자 인증됨" : "PIN을 입력해야 운영 기능을 사용할 수 있습니다."}</strong></div><Input type="password" value={operatorPin} onChange={(event) => { setOperatorPin(event.target.value); setOperatorVerified(false); }} placeholder="운영자 PIN" aria-label="운영자 PIN" /><Button variant={operatorVerified ? "outline" : "default"} disabled={busy || !operatorPin || operatorVerified} onClick={async () => { const result = await act("verify_operator", {}, "운영자 인증이 완료되었습니다.", operatorPin); if (result) setOperatorVerified(true); }}>{operatorVerified ? "인증 완료" : "인증하기"}</Button></section>
-          <section className="control-card"><p className="eyebrow">회차 운영</p><h2>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</h2><div className="clock"><Clock3 /><strong>{mm}:{ss}</strong><span>20분 활동</span></div><div className="control-buttons">{data.state.status === "ready" && <Button onClick={() => void act("start", {}, "1회차를 시작했습니다.", operatorPin)} disabled={busy || !operatorVerified}>1회차 시작</Button>}{data.state.status === "active" && <Button variant="outline" onClick={() => void act("pause", {}, "회차를 마쳤습니다.", operatorPin)} disabled={busy || !operatorVerified}>회차 마치기</Button>}{data.state.status === "break" && data.state.currentRound < 3 && <Button onClick={() => void act("next", {}, `${data.state.currentRound + 1}회차를 시작했습니다.`, operatorPin)} disabled={busy || !operatorVerified}>다음 회차 시작</Button>}{data.state.status === "break" && data.state.currentRound === 3 && <Button onClick={() => setConfirmAction("end")} disabled={busy || !operatorVerified}>전체 활동 종료</Button>}<Button variant="ghost" onClick={() => setConfirmAction("reset")} disabled={busy || !operatorVerified}><RotateCcw />초기화</Button></div><p className="helper">다음 회차를 시작하면 새 회차 좌석 현황이 0명에서 시작됩니다.</p></section>
+          <section className="control-card"><p className="eyebrow">회차 운영</p><h2>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</h2><button type="button" className="clock clock-button" onClick={() => setTimerExpanded(true)} aria-label="타이머 전체 화면으로 확대"><Clock3 /><strong>{mm}:{ss}</strong><span>20분 활동 · 눌러서 크게 보기</span><Maximize2 className="expand-icon" /></button><div className="control-buttons">{data.state.status === "ready" && <Button onClick={() => void act("start", {}, "1회차를 시작했습니다.", operatorPin)} disabled={busy || !operatorVerified}>1회차 시작</Button>}{data.state.status === "active" && <Button variant="outline" onClick={() => void act("pause", {}, "회차를 마쳤습니다.", operatorPin)} disabled={busy || !operatorVerified}>회차 마치기</Button>}{data.state.status === "break" && data.state.currentRound < 3 && <Button onClick={() => void act("next", {}, `${data.state.currentRound + 1}회차를 시작했습니다.`, operatorPin)} disabled={busy || !operatorVerified}>다음 회차 시작</Button>}{data.state.status === "break" && data.state.currentRound === 3 && <Button onClick={() => setConfirmAction("end")} disabled={busy || !operatorVerified}>전체 활동 종료</Button>}<Button variant="ghost" onClick={() => setConfirmAction("reset")} disabled={busy || !operatorVerified}><RotateCcw />초기화</Button></div><p className="helper">다음 회차를 시작하면 새 회차 좌석 현황이 0명에서 시작됩니다.</p></section>
           <section className="control-card"><p className="eyebrow">자료 링크 등록</p><h2>테이블 발표 자료 연결</h2><Label>테이블</Label><Select value={selectedTable} onValueChange={(value) => { setSelectedTable(value); setMaterialUrl(data.materials[value] || ""); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TOPICS.map((topic, i) => <SelectItem key={topic} value={String(i + 1)}>{i + 1}. {topic}</SelectItem>)}</SelectContent></Select><Label htmlFor="material-url">Padlet 또는 자료 주소</Label><Input id="material-url" type="url" value={materialUrl} onChange={(e) => setMaterialUrl(e.target.value)} placeholder="https://" /><Button variant="outline" disabled={busy || !materialUrl || !operatorVerified} onClick={() => void act("material", { tableId: Number(selectedTable), url: materialUrl }, "자료 링크를 저장했습니다.", operatorPin)}>링크 저장</Button></section>
           <section className="control-card raffle-card"><p className="eyebrow">참여자 추첨</p><h2>소감 작성자 중 한 명 뽑기</h2><Gift size={42} /><p>현재 {data.feedback.filter((item) => !item.winner).length}명이 추첨을 기다리고 있습니다.</p><Button disabled={busy || !operatorVerified || data.feedback.filter((item) => !item.winner).length === 0} onClick={async () => { const result = await act("raffle", {}, undefined, operatorPin); const picked = result?.winner as { name: string; message: string } | undefined; if (picked) setWinner(picked); }}>지금 추첨하기</Button></section>
         </TabsContent>
       </Tabs>
+
+      <footer className="site-footer"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={271} height={91} /><p>2026 수업 나눔의 날 · 수업나눔 톡톡!카페</p></footer>
+
+      {timerExpanded && <div className="timer-fullscreen" role="dialog" aria-modal="true" aria-label={`${data.state.currentRound}회차 전체 화면 타이머`}><button type="button" className="timer-close" onClick={() => setTimerExpanded(false)}><Minimize2 />작게 보기</button><div className="timer-brand"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={271} height={91} priority /></div><div className="timer-content"><p>2026 수업 나눔의 날</p><h2>수업나눔 톡톡!카페</h2><span>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</span><strong>{data.state.status === "active" ? `${mm}:${ss}` : "20:00"}</strong><small>{data.state.status === "active" ? "수업 나눔이 진행 중입니다" : "회차 시작을 준비해 주세요"}</small></div></div>}
 
       <Dialog open={!!winner} onOpenChange={(open) => !open && setWinner(null)}><DialogContent className="winner-dialog"><DialogHeader><DialogDescription>축하합니다!</DialogDescription><DialogTitle>{winner?.name} 님이 당첨되었습니다</DialogTitle></DialogHeader><Gift size={64} /><blockquote>“{winner?.message}”</blockquote><Button onClick={() => setWinner(null)}>확인</Button></DialogContent></Dialog>
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{confirmAction === "reset" ? "운영 현황을 초기화할까요?" : "모든 활동을 종료할까요?"}</AlertDialogTitle><AlertDialogDescription>{confirmAction === "reset" ? "참석 기록과 참여 소감이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다." : "모든 화면에 활동 종료 안내가 표시됩니다."}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => { const action = confirmAction; setConfirmAction(null); if (action) void act(action, {}, action === "reset" ? "운영 현황을 초기화했습니다." : "모든 활동을 종료했습니다.", operatorPin); }}>{confirmAction === "reset" ? "초기화" : "활동 종료"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
