@@ -4,6 +4,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const CAPACITY = 7;
+const DEFAULT_OPERATOR_PIN_HASH = "790520ed9fe8bbad69ddbe81f243a056fc801861f7f4d1b0d46ad85820624ed9";
+const FILTERED_TERMS = [
+  "씨발", "시발", "씨바ᄅ", "시바ᄅ", "개새끼", "새끼", "병신", "지랄", "꺼져", "닥쳐", "미친", "멍청", "바보", "죽어", "엿먹",
+  "최악", "형편없", "별로", "재미없", "지루", "싫어", "짜증", "불쾌", "불편", "실망", "엉망", "망했", "쓸모없", "시간낭비",
+  "sibal",
+];
+const FILTERED_PATTERNS = FILTERED_TERMS.map((term) => new RegExp(
+  Array.from(term).map((character) => character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\s._·*~-]*"),
+  "giu",
+));
 type Sql = Awaited<ReturnType<typeof getDatabase>>;
 type EventState = { currentRound: number; status: "ready" | "active" | "break" | "ended"; roundStartedAt: string | null };
 
@@ -16,16 +26,24 @@ function truncate(value: unknown, length: number) {
   return Array.from(String(value ?? "").trim()).slice(0, length).join("");
 }
 
+function filterNegativeWords(value: unknown, length: number) {
+  let filtered = truncate(value, length).normalize("NFKC");
+  for (const pattern of FILTERED_PATTERNS) {
+    filtered = filtered.replace(pattern, (match) => "•".repeat(Math.max(2, Array.from(match).filter((character) => /[\p{L}\p{N}]/u.test(character)).length)));
+  }
+  return filtered;
+}
+
+function hexToBytes(value: string) {
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+}
+
 async function validOperator(request: Request) {
-  const expected = process.env.OPERATOR_PIN;
   const provided = request.headers.get("X-Operator-Pin") ?? "";
-  if (!expected || !provided) return false;
+  if (!provided) return false;
   const encoder = new TextEncoder();
-  const [expectedHash, providedHash] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
-  ]);
-  const expectedBytes = new Uint8Array(expectedHash);
+  const providedHash = await crypto.subtle.digest("SHA-256", encoder.encode(provided));
+  const expectedBytes = hexToBytes(DEFAULT_OPERATOR_PIN_HASH);
   const providedBytes = new Uint8Array(providedHash);
   let mismatch = expectedBytes.length ^ providedBytes.length;
   for (let index = 0; index < expectedBytes.length; index += 1) {
@@ -73,7 +91,11 @@ export async function GET() {
       state,
       capacity: CAPACITY,
       counts: Object.fromEntries(countRows.map((row) => [Number(row.table_id), Math.min(Number(row.count), CAPACITY)])),
-      feedback: feedbackRows,
+      feedback: feedbackRows.map((row) => ({
+        ...row,
+        name: filterNegativeWords(row.name, 30) || "익명",
+        message: filterNegativeWords(row.message, 240),
+      })),
       materials: Object.fromEntries(materialRows.map((row) => [Number(row.table_id), String(row.url)])),
       serverTime: new Date().toISOString(),
     });
@@ -91,7 +113,6 @@ export async function POST(request: Request) {
     const state = await readState(sql);
 
     if (action === "verify_operator") {
-      if (!process.env.OPERATOR_PIN) return Response.json({ error: "운영자 PIN이 아직 설정되지 않았습니다." }, { status: 503 });
       if (!(await validOperator(request))) return Response.json({ error: "운영자 PIN이 올바르지 않습니다." }, { status: 401 });
       return Response.json({ ok: true });
     }
@@ -132,8 +153,8 @@ export async function POST(request: Request) {
     }
 
     if (action === "feedback") {
-      const message = truncate(payload.message, 240);
-      const name = truncate(payload.name, 30) || "익명";
+      const message = filterNegativeWords(payload.message, 240);
+      const name = filterNegativeWords(payload.name, 30) || "익명";
       if (!message) return Response.json({ error: "참여 소감을 입력해 주세요." }, { status: 400 });
       await sql`INSERT INTO feedback (name, message) VALUES (${name}, ${message})`;
       return Response.json({ ok: true });
@@ -191,7 +212,7 @@ export async function POST(request: Request) {
         RETURNING feedback.id, feedback.name, feedback.message`;
       const winner = rows[0];
       if (!winner) return Response.json({ error: "추첨할 참여 소감이 없습니다." }, { status: 409 });
-      return Response.json({ ok: true, winner });
+      return Response.json({ ok: true, winner: { ...winner, name: filterNegativeWords(winner.name, 30), message: filterNegativeWords(winner.message, 240) } });
     }
 
     return Response.json({ error: "지원하지 않는 요청입니다." }, { status: 400 });

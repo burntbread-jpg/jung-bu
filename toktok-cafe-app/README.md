@@ -13,7 +13,6 @@ npm run dev
 `.env.local`에 다음 값을 설정합니다.
 
 - `DATABASE_URL`: Neon PostgreSQL 접속 문자열
-- `OPERATOR_PIN`: 운영 탭 보호용 PIN
 
 데이터베이스 테이블과 인덱스는 첫 API 요청 시 안전하게 생성됩니다.
 
@@ -25,7 +24,6 @@ npm run dev
 2. **Settings → Build and Deployment → Root Directory**를 `toktok-cafe-app`으로 설정합니다.
 3. Marketplace에서 Neon을 설치하고 이 프로젝트에 연결합니다.
 4. `DATABASE_URL`이 자동 등록되었는지 확인합니다.
-5. Environment Variables에 `OPERATOR_PIN`을 Sensitive 값으로 추가합니다.
-6. 최신 커밋을 Redeploy 합니다.
+5. 최신 커밋을 Redeploy 합니다.
 
 Vercel은 Next.js를 자동 감지하므로 별도의 Build Command나 Output Directory를 지정하지 않습니다.
