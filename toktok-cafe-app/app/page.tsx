@@ -110,10 +110,15 @@ export default function Home() {
   }, [refresh]);
 
   useEffect(() => {
-    const context = (document as Document & { modelContext?: { registerTool?: (tool: unknown, options?: { signal: AbortSignal }) => void } }).modelContext;
+    const context = (document as Document & { modelContext?: { registerTool?: (tool: unknown, options?: { signal: AbortSignal }) => void | Promise<unknown> } }).modelContext;
     if (!context?.registerTool) return;
     const lifecycle = new AbortController();
-    const register = (tool: unknown) => { try { context.registerTool?.(tool, { signal: lifecycle.signal }); } catch { /* optional API */ } };
+    const register = (tool: unknown) => {
+      try {
+        const pending = context.registerTool?.(tool, { signal: lifecycle.signal });
+        if (pending instanceof Promise) void pending.catch(() => undefined);
+      } catch { /* optional API */ }
+    };
     register({ name: "read_event_status", title: "행사 현황 읽기", description: "현재 회차와 15개 테이블 잔여 좌석을 읽습니다.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute: async () => { const response = await fetch("/api/event", { cache: "no-store" }); return response.json(); } });
     register({ name: "record_attendance", title: "테이블 참석 등록", description: "선택한 테이블의 현재 회차 참석 인원을 1명 늘립니다.", inputSchema: { type: "object", properties: { tableId: { type: "integer", minimum: 1, maximum: 15 } }, required: ["tableId"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: async (input: { tableId: number }) => send("attend", input) });
     register({ name: "submit_feedback", title: "참여 소감 등록", description: "행사 참여 소감을 공유하고 추첨 대상에 포함합니다.", inputSchema: { type: "object", properties: { name: { type: "string", maxLength: 30 }, message: { type: "string", minLength: 1, maxLength: 240 } }, required: ["message"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async (input: { name?: string; message: string }) => send("feedback", input) });
@@ -133,7 +138,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="topbar-brand"><span className="header-logo"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={271} height={91} priority /></span><div><p className="eyebrow">2026 수업 나눔의 날</p><h1>수업나눔 톡톡!카페</h1></div></div>
+        <div className="topbar-brand"><span className="header-logo"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={2168} height={725} style={{ width: "100%", height: "auto" }} priority /></span><div><p className="eyebrow">2026 수업 나눔의 날</p><h1>수업나눔 톡톡!카페</h1></div></div>
         <div className="round-panel" aria-live="polite"><span>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</span><strong>{data.state.status === "active" ? `${mm}:${ss}` : "20:00"}</strong></div>
       </header>
 
@@ -172,9 +177,9 @@ export default function Home() {
         </TabsContent>
       </Tabs>
 
-      <footer className="site-footer"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={271} height={91} /><p>2026 수업 나눔의 날 · 수업나눔 톡톡!카페</p></footer>
+      <footer className="site-footer"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={2168} height={725} style={{ width: "min(271px, 72vw)", height: "auto" }} /><p>2026 수업 나눔의 날 · 수업나눔 톡톡!카페</p></footer>
 
-      {timerExpanded && <div className="timer-fullscreen" role="dialog" aria-modal="true" aria-label={`${data.state.currentRound}회차 전체 화면 타이머`}><button type="button" className="timer-close" onClick={() => setTimerExpanded(false)}><Minimize2 />작게 보기</button><div className="timer-brand"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={271} height={91} priority /></div><div className="timer-content"><p>2026 수업 나눔의 날</p><h2>수업나눔 톡톡!카페</h2><span>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</span><strong>{data.state.status === "active" ? `${mm}:${ss}` : "20:00"}</strong><small>{data.state.status === "active" ? "수업 나눔이 진행 중입니다" : "회차 시작을 준비해 주세요"}</small></div></div>}
+      {timerExpanded && <div className="timer-fullscreen" role="dialog" aria-modal="true" aria-label={`${data.state.currentRound}회차 전체 화면 타이머`}><button type="button" className="timer-close" onClick={() => setTimerExpanded(false)}><Minimize2 />작게 보기</button><div className="timer-brand"><Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={2168} height={725} style={{ width: "100%", height: "auto" }} priority /></div><div className="timer-content"><p>2026 수업 나눔의 날</p><h2>수업나눔 톡톡!카페</h2><span>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</span><strong>{data.state.status === "active" ? `${mm}:${ss}` : "20:00"}</strong><small>{data.state.status === "active" ? "수업 나눔이 진행 중입니다" : "회차 시작을 준비해 주세요"}</small></div></div>}
 
       <Dialog open={!!winner} onOpenChange={(open) => !open && setWinner(null)}><DialogContent className="winner-dialog"><DialogHeader><DialogDescription>축하합니다!</DialogDescription><DialogTitle>{winner?.name} 님이 당첨되었습니다</DialogTitle></DialogHeader><Gift size={64} /><blockquote>“{winner?.message}”</blockquote><Button onClick={() => setWinner(null)}>확인</Button></DialogContent></Dialog>
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{confirmAction === "reset" ? "운영 현황을 초기화할까요?" : "모든 활동을 종료할까요?"}</AlertDialogTitle><AlertDialogDescription>{confirmAction === "reset" ? "참석 기록과 참여 소감이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다." : "모든 화면에 활동 종료 안내가 표시됩니다."}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => { const action = confirmAction; setConfirmAction(null); if (action) void act(action, {}, action === "reset" ? "운영 현황을 초기화했습니다." : "모든 활동을 종료했습니다.", operatorPin); }}>{confirmAction === "reset" ? "초기화" : "활동 종료"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
