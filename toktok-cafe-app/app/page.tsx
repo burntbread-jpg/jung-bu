@@ -25,7 +25,7 @@ type EventData = {
   state: { currentRound: number; status: "ready" | "active" | "break" | "ended"; roundStartedAt: string | null };
   capacity: number;
   counts: Record<string, number>;
-  feedback: Array<{ id: number; name: string; message: string; winner: number; created_at: string }>;
+  feedback: Array<{ id: number; name: string; message: string; winner: boolean; created_at: string }>;
   materials: Record<string, string>;
   serverTime: string;
 };
@@ -72,12 +72,16 @@ export default function Home() {
       setData(body);
       setServerOffset(new Date(body.serverTime).getTime() - Date.now());
       setConnected(true);
-    } catch (error) {
+    } catch {
       setConnected(false);
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { void refresh(); const id = window.setInterval(() => void refresh(), 2000); return () => window.clearInterval(id); }, [refresh]);
+  useEffect(() => {
+    const initial = window.setTimeout(() => void refresh(), 0);
+    const id = window.setInterval(() => void refresh(), 2000);
+    return () => { window.clearTimeout(initial); window.clearInterval(id); };
+  }, [refresh]);
   useEffect(() => {
     const tick = () => {
       if (data.state.status !== "active" || !data.state.roundStartedAt) return setSecondsLeft(1200);
