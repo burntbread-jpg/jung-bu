@@ -41,7 +41,10 @@ export default function MobileFeedbackPage() {
     <main className="mobile-feedback-page">
       <header className="mobile-feedback-header">
         <Link href="/" aria-label="행사 화면으로 돌아가기"><ArrowLeft /></Link>
-        <Image src="/jungbu-office-logo.png" alt="서울특별시중부교육지원청" width={2168} height={725} priority />
+        <div className="mobile-feedback-brand">
+          <Image src="/jungbu-office-symbol.png" alt="" width={320} height={320} priority />
+          <div><strong>수업나눔 톡톡!카페</strong><span>서울특별시중부교육지원청</span></div>
+        </div>
       </header>
 
       <section className="mobile-feedback-card">
@@ -56,15 +59,17 @@ export default function MobileFeedbackPage() {
         ) : (
           <>
             <p className="eyebrow">2026 수업 나눔의 날</p>
-            <h1>오늘의 배움을<br />들려주세요</h1>
-            <p className="mobile-feedback-intro">짧은 한마디도 좋아요. 작성한 소감은 행사 화면에 바로 공유되며 추첨에도 자동으로 참여합니다.</p>
+            <h1>오늘의 배움을<br />남겨주세요</h1>
+            <p className="mobile-feedback-intro">새롭게 발견한 점이나 내 수업에 적용하고 싶은 생각을 천천히 적어주세요.</p>
             <div className="mobile-feedback-form">
-              <Label htmlFor="mobile-name">이름 또는 별명</Label>
-              <Input id="mobile-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="익명으로 남겨도 좋아요" maxLength={30} autoComplete="nickname" />
-              <Label htmlFor="mobile-message">참여 소감</Label>
-              <Textarea id="mobile-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="기억에 남은 배움이나 동료에게 전하고 싶은 말을 적어주세요." maxLength={240} autoFocus />
-              <div className="mobile-feedback-count"><span>{message.length}/240</span><span>부적절한 표현은 자동으로 가려집니다.</span></div>
+              <div className="mobile-feedback-field-heading"><Label htmlFor="mobile-message">참여 소감</Label><span>필수</span></div>
+              <p className="mobile-feedback-prompts">새롭게 알게 된 점 · 적용해 보고 싶은 점 · 함께 나누고 싶은 생각</p>
+              <Textarea id="mobile-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder={"오늘 가장 기억에 남은 장면은 무엇인가요?\n그 배움을 내 교실에서는 어떻게 이어가고 싶나요?"} maxLength={500} rows={10} />
+              <div className="mobile-feedback-count"><span>부적절한 표현은 자동으로 가려집니다.</span><strong>{message.length}/500</strong></div>
+              <Label htmlFor="mobile-name">이름 또는 별명 <span>선택</span></Label>
+              <Input id="mobile-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="비워두면 익명으로 등록돼요" maxLength={30} autoComplete="nickname" />
               <Button disabled={busy || !message.trim()} onClick={() => void submitFeedback()}>{busy ? "공유하는 중..." : <><Send />소감 공유하기</>}</Button>
+              <p className="mobile-feedback-disclosure">작성한 소감은 행사 화면에 바로 공유되며 추첨 대상에 포함됩니다.</p>
             </div>
           </>
         )}

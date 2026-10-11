@@ -94,7 +94,7 @@ export async function GET() {
       feedback: feedbackRows.map((row) => ({
         ...row,
         name: filterNegativeWords(row.name, 30) || "익명",
-        message: filterNegativeWords(row.message, 240),
+        message: filterNegativeWords(row.message, 500),
       })),
       materials: Object.fromEntries(materialRows.map((row) => [Number(row.table_id), String(row.url)])),
       materialImages: Object.fromEntries(materialRows.filter((row) => row.image_url).map((row) => [Number(row.table_id), String(row.image_url)])),
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "feedback") {
-      const message = filterNegativeWords(payload.message, 240);
+      const message = filterNegativeWords(payload.message, 500);
       const name = filterNegativeWords(payload.name, 30) || "익명";
       if (!message) return Response.json({ error: "참여 소감을 입력해 주세요." }, { status: 400 });
       await sql`INSERT INTO feedback (name, message) VALUES (${name}, ${message})`;
@@ -216,7 +216,7 @@ export async function POST(request: Request) {
         RETURNING feedback.id, feedback.name, feedback.message`;
       const winner = rows[0];
       if (!winner) return Response.json({ error: "추첨할 참여 소감이 없습니다." }, { status: 409 });
-      return Response.json({ ok: true, winner: { ...winner, name: filterNegativeWords(winner.name, 30), message: filterNegativeWords(winner.message, 240) } });
+      return Response.json({ ok: true, winner: { ...winner, name: filterNegativeWords(winner.name, 30), message: filterNegativeWords(winner.message, 500) } });
     }
 
     return Response.json({ error: "지원하지 않는 요청입니다." }, { status: 400 });
