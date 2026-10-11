@@ -25,6 +25,9 @@ async function ensureSchema(sql: SqlClient) {
         round_started_at timestamptz,
         updated_at timestamptz NOT NULL DEFAULT now()
       )`,
+      tx`INSERT INTO event_state (id, current_round, status, round_started_at)
+        VALUES (1, 1, 'ready', NULL)
+        ON CONFLICT (id) DO NOTHING`,
       tx`CREATE TABLE IF NOT EXISTS attendance (
         id bigserial PRIMARY KEY,
         table_id integer NOT NULL CHECK (table_id BETWEEN 1 AND 15),

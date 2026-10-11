@@ -17,6 +17,11 @@ const FILTERED_PATTERNS = FILTERED_TERMS.map((term) => new RegExp(
 type Sql = Awaited<ReturnType<typeof getDatabase>>;
 type EventState = { currentRound: number; status: "ready" | "active" | "break" | "ended"; roundStartedAt: string | null };
 
+function attendanceRoundFor(state: EventState) {
+  if (state.status === "ended" || (state.status === "break" && state.currentRound >= 3)) return null;
+  return state.status === "break" ? state.currentRound + 1 : state.currentRound;
+}
+
 function validTableId(value: unknown) {
   const id = Number(value);
   return Number.isInteger(id) && id >= 1 && id <= 15 ? id : null;
@@ -82,13 +87,17 @@ export async function GET() {
   try {
     const sql = await getDatabase();
     const state = await readState(sql);
+    const attendanceRound = attendanceRoundFor(state);
     const [countRows, feedbackRows, materialRows] = await Promise.all([
-      sql`SELECT table_id, COUNT(*)::integer AS count FROM attendance WHERE round = ${state.currentRound} GROUP BY table_id`,
+      attendanceRound
+        ? sql`SELECT table_id, COUNT(*)::integer AS count FROM attendance WHERE round = ${attendanceRound} GROUP BY table_id`
+        : Promise.resolve([]),
       sql`SELECT id, name, message, winner, created_at FROM feedback ORDER BY id DESC LIMIT 60`,
       sql`SELECT table_id, url, image_url FROM material_links ORDER BY table_id`,
     ]);
     return Response.json({
       state,
+      attendanceRound,
       capacity: CAPACITY,
       counts: Object.fromEntries(countRows.map((row) => [Number(row.table_id), Math.min(Number(row.count), CAPACITY)])),
       feedback: feedbackRows.map((row) => ({
@@ -126,31 +135,30 @@ export async function POST(request: Request) {
     if (action === "attend") {
       const tableId = validTableId(payload.tableId);
       if (!tableId) return Response.json({ error: "테이블 번호를 확인해 주세요." }, { status: 400 });
-      if (state.status !== "active") return Response.json({ error: "현재 참석을 받는 회차가 아닙니다." }, { status: 409 });
+      if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참석 접수가 종료되었습니다." }, { status: 409 });
 
       const startSlot = crypto.getRandomValues(new Uint32Array(1))[0] % CAPACITY;
-      let inserted = false;
+      let insertedRound: number | null = null;
       for (let offset = 0; offset < CAPACITY; offset += 1) {
         const slot = ((startSlot + offset) % CAPACITY) + 1;
         const rows = await sql`INSERT INTO attendance (table_id, round, slot)
-          SELECT ${tableId}, ${state.currentRound}, ${slot}
+          SELECT ${tableId}, CASE WHEN status = 'break' THEN current_round + 1 ELSE current_round END, ${slot}
           FROM event_state
           WHERE id = 1
-            AND current_round = ${state.currentRound}
-            AND status = 'active'
-            AND round_started_at > now() - interval '20 minutes'
+            AND status <> 'ended'
+            AND NOT (status = 'break' AND current_round >= 3)
           ON CONFLICT (round, table_id, slot) DO NOTHING
-          RETURNING id`;
-        if (rows.length) { inserted = true; break; }
+          RETURNING round`;
+        if (rows.length) { insertedRound = Number(rows[0].round); break; }
       }
-      if (!inserted) {
+      if (!insertedRound) {
         const latest = await readState(sql);
-        const error = latest.status === "active" ? "이 테이블은 정원이 찼습니다." : "현재 참석을 받는 회차가 아닙니다.";
+        const error = attendanceRoundFor(latest) ? "이 테이블은 정원이 찼습니다." : "모든 회차의 참석 접수가 종료되었습니다.";
         return Response.json({ error }, { status: 409 });
       }
-      const countRows = await sql`SELECT COUNT(*)::integer AS count FROM attendance WHERE round = ${state.currentRound} AND table_id = ${tableId}`;
+      const countRows = await sql`SELECT COUNT(*)::integer AS count FROM attendance WHERE round = ${insertedRound} AND table_id = ${tableId}`;
       const count = Math.min(Number(countRows[0]?.count ?? 0), CAPACITY);
-      return Response.json({ ok: true, count, remaining: CAPACITY - count });
+      return Response.json({ ok: true, attendanceRound: insertedRound, count, remaining: CAPACITY - count });
     }
 
     if (action === "feedback") {
