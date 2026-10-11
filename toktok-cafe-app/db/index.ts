@@ -58,8 +58,10 @@ async function ensureSchema(sql: SqlClient) {
       tx`CREATE TABLE IF NOT EXISTS material_links (
         table_id integer PRIMARY KEY CHECK (table_id BETWEEN 1 AND 15),
         url text NOT NULL,
+        image_url text,
         updated_at timestamptz NOT NULL DEFAULT now()
       )`,
+      tx`ALTER TABLE material_links ADD COLUMN IF NOT EXISTS image_url text`,
     ]).then(() => undefined).catch((error) => {
       schemaPromise = undefined;
       throw error;

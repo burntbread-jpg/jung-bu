@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Clock3, ExternalLink, Gift, LayoutGrid, Maximize2, MessageCircle, Minimize2, MonitorCog, RotateCcw, Users } from "lucide-react";
+import { BookOpen, Check, Clock3, ExternalLink, Gift, LayoutGrid, Maximize2, MessageCircle, Minimize2, MonitorCog, RotateCcw, Smartphone, Users } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -28,10 +29,11 @@ type EventData = {
   counts: Record<string, number>;
   feedback: Array<{ id: number; name: string; message: string; winner: boolean; created_at: string }>;
   materials: Record<string, string>;
+  materialImages: Record<string, string>;
   serverTime: string;
 };
 
-const EMPTY: EventData = { state: { currentRound: 1, status: "ready", roundStartedAt: null }, capacity: 7, counts: {}, feedback: [], materials: {}, serverTime: new Date().toISOString() };
+const EMPTY: EventData = { state: { currentRound: 1, status: "ready", roundStartedAt: null }, capacity: 7, counts: {}, feedback: [], materials: {}, materialImages: {}, serverTime: new Date().toISOString() };
 
 async function send(action: string, payload: Record<string, unknown> = {}, operatorPin?: string) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -49,6 +51,18 @@ function statusLabel(status: EventData["state"]["status"]) {
   return "참석 가능";
 }
 
+function safeBackgroundStyle(value?: string) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return undefined;
+    const safeUrl = url.href.replace(/["'()\\\n\r\f]/g, (character) => encodeURIComponent(character));
+    return { backgroundImage: `url("${safeUrl}")` };
+  } catch {
+    return undefined;
+  }
+}
+
 export default function Home() {
   const [data, setData] = useState<EventData>(EMPTY);
   const [selectedTable, setSelectedTable] = useState("1");
@@ -57,6 +71,8 @@ export default function Home() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [materialUrl, setMaterialUrl] = useState("");
+  const [materialImageUrl, setMaterialImageUrl] = useState("");
+  const [feedbackUrl, setFeedbackUrl] = useState("/feedback");
   const [secondsLeft, setSecondsLeft] = useState(1200);
   const [winner, setWinner] = useState<{ name: string; message: string } | null>(null);
   const [operatorPin, setOperatorPin] = useState("");
@@ -84,6 +100,10 @@ export default function Home() {
     const id = window.setInterval(() => void refresh(), 2000);
     return () => { window.clearTimeout(initial); window.clearInterval(id); };
   }, [refresh]);
+  useEffect(() => {
+    const id = window.setTimeout(() => setFeedbackUrl(`${window.location.origin}/feedback`), 0);
+    return () => window.clearTimeout(id);
+  }, []);
   useEffect(() => {
     const tick = () => {
       if (data.state.status !== "active" || !data.state.roundStartedAt) return setSecondsLeft(1200);
@@ -151,7 +171,7 @@ export default function Home() {
           <section className="summary-row"><div><span>현재 참여</span><strong>{occupied}<small>명</small></strong></div><div><span>남은 좌석</span><strong>{data.capacity * 15 - occupied}<small>석</small></strong></div><div><span>운영 테이블</span><strong>15<small>개</small></strong></div></section>
           <section className="section-heading"><div><p className="eyebrow">실시간 좌석 현황</p><h2>참여할 테이블을 골라보세요</h2></div><span className={`live-pill ${connected ? "" : "offline"}`}><i />{connected ? "2초마다 반영" : "연결 끊김 · 다시 연결 중"}</span></section>
           <div className="table-grid" role="region" aria-live="polite" aria-label="테이블별 잔여 좌석 현황">
-            {TOPICS.map((topic, index) => { const id = index + 1; const count = Number(data.counts[id] ?? 0); const remaining = Math.max(0, data.capacity - count); return <article className={`table-card ${remaining === 0 ? "full" : remaining <= 3 ? "nearly" : ""}`} aria-label={`${topic}, ${remaining}석 남음`} key={topic}><div className="table-number">{String(id).padStart(2, "0")}</div><h3>{topic}</h3><div className="seat-line"><strong>{remaining}</strong><span>자리 남음</span></div><Progress value={(count / data.capacity) * 100} aria-label={`${topic} 좌석 사용률`} /><p>{count}/{data.capacity}명 참여</p></article>; })}
+            {TOPICS.map((topic, index) => { const id = index + 1; const count = Number(data.counts[id] ?? 0); const remaining = Math.max(0, data.capacity - count); const imageUrl = data.materialImages[String(id)]; return <article className={`table-card ${imageUrl ? "has-image" : ""} ${remaining === 0 ? "full" : remaining <= 3 ? "nearly" : ""}`} aria-label={`${topic}, ${remaining}석 남음`} key={topic}>{imageUrl && <div className="table-image" style={safeBackgroundStyle(imageUrl)} aria-hidden="true" />}<div className="table-card-content"><div className="table-number">TABLE {String(id).padStart(2, "0")}</div><h3>{topic}</h3><div className="seat-line"><strong>{remaining}</strong><span>자리 남음</span></div><Progress value={(count / data.capacity) * 100} aria-label={`${topic} 좌석 사용률`} /><p>{count}/{data.capacity}명 참여</p></div></article>; })}
           </div>
         </TabsContent>
 
@@ -160,19 +180,20 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="materials" className="content-panel">
-          <section className="section-heading"><div><p className="eyebrow">운영 자료 모음</p><h2>테이블별 발표 자료</h2></div><span className="subtle">링크는 운영 화면에서 등록</span></section>
-          <div className="material-list">{TOPICS.map((topic, i) => { const url = data.materials[String(i + 1)]; return <article key={topic}><span>{String(i + 1).padStart(2, "0")}</span><div><h3>{topic}</h3><p>{url ? "발표 자료가 준비되었습니다." : "자료 준비 중"}</p></div>{url ? <Button asChild variant="outline"><a href={url} target="_blank" rel="noreferrer">자료 열기 <ExternalLink /></a></Button> : <Button variant="outline" disabled>준비 중</Button>}</article>; })}</div>
+          <section className="material-heading"><p className="eyebrow">TEACHER PROJECT ARCHIVE · 2026</p><h2>교실에서 시작된<br />열다섯 개의 이야기</h2><p>각 테이블의 운영 교사가 준비한 수업 자료를 한 편의 포트폴리오처럼 만나보세요.</p></section>
+          <div className="material-showcase">{TOPICS.map((topic, i) => { const id = String(i + 1); const url = data.materials[id]; const imageUrl = data.materialImages[id]; return <article className={`material-project project-${(i % 6) + 1} ${imageUrl ? "has-image" : ""}`} key={topic}>{imageUrl && <div className="project-image" style={safeBackgroundStyle(imageUrl)} aria-hidden="true" />}<div className="project-copy"><span>{id.padStart(2, "0")} / 15</span><h3>{topic}</h3><p>{url ? "운영 교사의 수업 나눔 자료" : "자료 준비 중"}</p>{url ? <a href={url} target="_blank" rel="noreferrer">프로젝트 보기 <ExternalLink /></a> : <span className="project-waiting">곧 공개됩니다</span>}</div></article>; })}</div>
         </TabsContent>
 
         <TabsContent value="feedback" className="content-panel feedback-layout">
           <section className="feedback-form"><p className="eyebrow">소통의 시간</p><h2>오늘의 배움을 나눠주세요</h2><Label htmlFor="name">이름 또는 별명</Label><Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="익명으로 남겨도 좋아요" maxLength={30} /><Label htmlFor="message">참여 소감</Label><Textarea id="message" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="기억에 남은 배움이나 동료에게 전하고 싶은 말을 적어주세요." maxLength={240} /><div className="form-footer"><span>{message.length}/240</span><Button disabled={busy || !message.trim()} onClick={async () => { const result = await act("feedback", { name, message }, "소감이 공유되었습니다."); if (result) setMessage(""); }}>소감 공유하기</Button></div></section>
+          <aside className="feedback-qr"><div><p className="eyebrow">MOBILE FEEDBACK</p><h2>휴대폰으로 바로 작성</h2><p>카메라로 QR을 비추면 소감 입력 전용 모바일 화면이 열립니다.</p></div><a href={feedbackUrl} aria-label="모바일 소감 작성 화면 열기"><QRCodeSVG value={feedbackUrl} size={188} level="M" marginSize={2} title="모바일 소감 작성 QR 코드" /><span><Smartphone />직접 열기</span></a></aside>
           <section className="feedback-wall"><div className="wall-heading"><div><p className="eyebrow">실시간 소감</p><h2>{data.feedback.length}개의 이야기</h2></div><MessageCircle /></div>{data.feedback.length === 0 ? <p className="empty-copy">첫 번째 소감을 남겨주세요.</p> : <div className="messages">{data.feedback.map((item) => <article key={item.id} className={item.winner ? "winner-message" : ""}><p>{item.message}</p><span>{item.name}{item.winner ? " · 당첨" : ""}</span></article>)}</div>}</section>
         </TabsContent>
 
         <TabsContent value="control" className="content-panel control-layout">
-          <section className="operator-login"><div><p className="eyebrow">운영자 보호</p><strong>{operatorVerified ? "운영자 인증됨" : "PIN을 입력해야 운영 기능을 사용할 수 있습니다."}</strong></div><Input type="password" value={operatorPin} onChange={(event) => { setOperatorPin(event.target.value); setOperatorVerified(false); }} placeholder="운영자 PIN" aria-label="운영자 PIN" /><Button variant={operatorVerified ? "outline" : "default"} disabled={busy || !operatorPin || operatorVerified} onClick={async () => { const result = await act("verify_operator", {}, "운영자 인증이 완료되었습니다.", operatorPin); if (result) setOperatorVerified(true); }}>{operatorVerified ? "인증 완료" : "인증하기"}</Button></section>
+          <section className="operator-login"><div><p className="eyebrow">운영자 보호</p><strong>{operatorVerified ? "운영자 인증됨" : "PIN을 입력해야 운영 기능을 사용할 수 있습니다."}</strong></div><Input type="password" value={operatorPin} onChange={(event) => { setOperatorPin(event.target.value); setOperatorVerified(false); }} placeholder="운영자 PIN" aria-label="운영자 PIN" /><Button variant={operatorVerified ? "outline" : "default"} disabled={busy || !operatorPin || operatorVerified} onClick={async () => { const result = await act("verify_operator", {}, "운영자 인증이 완료되었습니다.", operatorPin); if (result) { setOperatorVerified(true); setMaterialUrl(data.materials[selectedTable] || ""); setMaterialImageUrl(data.materialImages[selectedTable] || ""); } }}>{operatorVerified ? "인증 완료" : "인증하기"}</Button></section>
           <section className="control-card"><p className="eyebrow">회차 운영</p><h2>{data.state.currentRound}회차 · {statusLabel(data.state.status)}</h2><button type="button" className="clock clock-button" onClick={() => setTimerExpanded(true)} aria-label="타이머 전체 화면으로 확대"><Clock3 /><strong>{mm}:{ss}</strong><span>20분 활동 · 눌러서 크게 보기</span><Maximize2 className="expand-icon" /></button><div className="control-buttons">{data.state.status === "ready" && <Button onClick={() => void act("start", {}, "1회차를 시작했습니다.", operatorPin)} disabled={busy || !operatorVerified}>1회차 시작</Button>}{data.state.status === "active" && <Button variant="outline" onClick={() => void act("pause", {}, "회차를 마쳤습니다.", operatorPin)} disabled={busy || !operatorVerified}>회차 마치기</Button>}{data.state.status === "break" && data.state.currentRound < 3 && <Button onClick={() => void act("next", {}, `${data.state.currentRound + 1}회차를 시작했습니다.`, operatorPin)} disabled={busy || !operatorVerified}>다음 회차 시작</Button>}{data.state.status === "break" && data.state.currentRound === 3 && <Button onClick={() => setConfirmAction("end")} disabled={busy || !operatorVerified}>전체 활동 종료</Button>}<Button variant="ghost" onClick={() => setConfirmAction("reset")} disabled={busy || !operatorVerified}><RotateCcw />초기화</Button></div><p className="helper">다음 회차를 시작하면 새 회차 좌석 현황이 0명에서 시작됩니다.</p></section>
-          <section className="control-card"><p className="eyebrow">자료 링크 등록</p><h2>테이블 발표 자료 연결</h2><Label>테이블</Label><Select value={selectedTable} onValueChange={(value) => { setSelectedTable(value); setMaterialUrl(data.materials[value] || ""); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TOPICS.map((topic, i) => <SelectItem key={topic} value={String(i + 1)}>{i + 1}. {topic}</SelectItem>)}</SelectContent></Select><Label htmlFor="material-url">Padlet 또는 자료 주소</Label><Input id="material-url" type="url" value={materialUrl} onChange={(e) => setMaterialUrl(e.target.value)} placeholder="https://" /><Button variant="outline" disabled={busy || !materialUrl || !operatorVerified} onClick={() => void act("material", { tableId: Number(selectedTable), url: materialUrl }, "자료 링크를 저장했습니다.", operatorPin)}>링크 저장</Button></section>
+          <section className="control-card"><p className="eyebrow">자료 등록</p><h2>발표 자료와 대표 이미지 연결</h2><Label>테이블</Label><Select value={selectedTable} onValueChange={(value) => { setSelectedTable(value); setMaterialUrl(data.materials[value] || ""); setMaterialImageUrl(data.materialImages[value] || ""); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TOPICS.map((topic, i) => <SelectItem key={topic} value={String(i + 1)}>{i + 1}. {topic}</SelectItem>)}</SelectContent></Select><Label htmlFor="material-url">발표 자료 주소</Label><Input id="material-url" type="url" value={materialUrl} onChange={(e) => setMaterialUrl(e.target.value)} placeholder="https://" /><Label htmlFor="material-image-url">대표 이미지 주소</Label><Input id="material-image-url" type="url" value={materialImageUrl} onChange={(e) => setMaterialImageUrl(e.target.value)} placeholder="https://.../대표이미지.jpg" /><p className="helper">공개된 이미지 주소를 넣으면 현황의 원형 테이블 배경과 자료 화면에 함께 표시됩니다.</p><Button variant="outline" disabled={busy || !materialUrl || !operatorVerified} onClick={() => void act("material", { tableId: Number(selectedTable), url: materialUrl, imageUrl: materialImageUrl }, "자료와 대표 이미지를 저장했습니다.", operatorPin)}>자료 저장</Button></section>
           <section className="control-card raffle-card"><p className="eyebrow">참여자 추첨</p><h2>소감 작성자 중 한 명 뽑기</h2><Gift size={42} /><p>현재 {data.feedback.filter((item) => !item.winner).length}명이 추첨을 기다리고 있습니다.</p><Button disabled={busy || !operatorVerified || data.feedback.filter((item) => !item.winner).length === 0} onClick={async () => { const result = await act("raffle", {}, undefined, operatorPin); const picked = result?.winner as { name: string; message: string } | undefined; if (picked) setWinner(picked); }}>지금 추첨하기</Button></section>
         </TabsContent>
       </Tabs>

@@ -85,7 +85,7 @@ export async function GET() {
     const [countRows, feedbackRows, materialRows] = await Promise.all([
       sql`SELECT table_id, COUNT(*)::integer AS count FROM attendance WHERE round = ${state.currentRound} GROUP BY table_id`,
       sql`SELECT id, name, message, winner, created_at FROM feedback ORDER BY id DESC LIMIT 60`,
-      sql`SELECT table_id, url FROM material_links ORDER BY table_id`,
+      sql`SELECT table_id, url, image_url FROM material_links ORDER BY table_id`,
     ]);
     return Response.json({
       state,
@@ -97,6 +97,7 @@ export async function GET() {
         message: filterNegativeWords(row.message, 240),
       })),
       materials: Object.fromEntries(materialRows.map((row) => [Number(row.table_id), String(row.url)])),
+      materialImages: Object.fromEntries(materialRows.filter((row) => row.image_url).map((row) => [Number(row.table_id), String(row.image_url)])),
       serverTime: new Date().toISOString(),
     });
   } catch (error) {
@@ -196,11 +197,14 @@ export async function POST(request: Request) {
     if (action === "material") {
       const tableId = validTableId(payload.tableId);
       const url = truncate(payload.url, 500);
+      const imageUrl = truncate(payload.imageUrl, 1000);
       let validUrl = false;
       try { validUrl = ["http:", "https:"].includes(new URL(url).protocol); } catch { validUrl = false; }
-      if (!tableId || !validUrl) return Response.json({ error: "테이블과 http(s) 자료 주소를 확인해 주세요." }, { status: 400 });
-      await sql`INSERT INTO material_links (table_id, url, updated_at) VALUES (${tableId}, ${url}, now())
-        ON CONFLICT (table_id) DO UPDATE SET url = EXCLUDED.url, updated_at = now()`;
+      let validImageUrl = !imageUrl;
+      try { validImageUrl = !imageUrl || ["http:", "https:"].includes(new URL(imageUrl).protocol); } catch { validImageUrl = false; }
+      if (!tableId || !validUrl || !validImageUrl) return Response.json({ error: "테이블과 http(s) 자료·이미지 주소를 확인해 주세요." }, { status: 400 });
+      await sql`INSERT INTO material_links (table_id, url, image_url, updated_at) VALUES (${tableId}, ${url}, ${imageUrl || null}, now())
+        ON CONFLICT (table_id) DO UPDATE SET url = EXCLUDED.url, image_url = EXCLUDED.image_url, updated_at = now()`;
       return Response.json({ ok: true });
     }
 
