@@ -18,7 +18,7 @@ export default function MobileFeedbackPage() {
   const [submitted, setSubmitted] = useState(false);
 
   async function submitFeedback() {
-    if (!message.trim()) return;
+    if (!message.trim() || !name.trim()) return;
     setBusy(true);
     try {
       const response = await fetch("/api/event", {
@@ -58,7 +58,7 @@ export default function MobileFeedbackPage() {
           </div>
         ) : (
           <>
-            <p className="eyebrow">2026 수업 나눔의 날</p>
+            <p className="eyebrow">2026 수업 나눔의 달</p>
             <h1>오늘의 배움을<br />남겨주세요</h1>
             <p className="mobile-feedback-intro">새롭게 발견한 점이나 내 수업에 적용하고 싶은 생각을 천천히 적어주세요.</p>
             <div className="mobile-feedback-form">
@@ -66,10 +66,10 @@ export default function MobileFeedbackPage() {
               <p className="mobile-feedback-prompts">새롭게 알게 된 점 · 적용해 보고 싶은 점 · 함께 나누고 싶은 생각</p>
               <Textarea id="mobile-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder={"오늘 가장 기억에 남은 장면은 무엇인가요?\n그 배움을 내 교실에서는 어떻게 이어가고 싶나요?"} maxLength={500} rows={10} />
               <div className="mobile-feedback-count"><span>부적절한 표현은 자동으로 가려집니다.</span><strong>{message.length}/500</strong></div>
-              <Label htmlFor="mobile-name">이름 또는 별명 <span>선택</span></Label>
-              <Input id="mobile-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="비워두면 익명으로 등록돼요" maxLength={30} autoComplete="nickname" />
-              <Button disabled={busy || !message.trim()} onClick={() => void submitFeedback()}>{busy ? "공유하는 중..." : <><Send />소감 공유하기</>}</Button>
-              <p className="mobile-feedback-disclosure">작성한 소감은 행사 화면에 바로 공유되며 추첨 대상에 포함됩니다.</p>
+              <Label htmlFor="mobile-name">이름 또는 별명 <span>필수</span></Label>
+              <Input id="mobile-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="추첨 때 불러드릴 이름이나 별명" maxLength={30} autoComplete="nickname" />
+              <Button disabled={busy || !message.trim() || !name.trim()} onClick={() => void submitFeedback()}>{busy ? "공유하는 중..." : <><Send />소감 공유하기</>}</Button>
+              <p className="mobile-feedback-disclosure">작성한 이름 또는 별명과 소감은 행사 화면에 공유되며 추첨 대상에 포함됩니다.</p>
             </div>
           </>
         )}

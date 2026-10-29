@@ -1,9 +1,9 @@
 import { getDatabase } from "@/db";
+import { TABLE_CAPACITIES, tableCapacity } from "@/lib/event-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CAPACITY = 7;
 const DEFAULT_OPERATOR_PIN_HASH = "790520ed9fe8bbad69ddbe81f243a056fc801861f7f4d1b0d46ad85820624ed9";
 const FILTERED_TERMS = [
   "씨발", "시발", "씨바ᄅ", "시바ᄅ", "개새끼", "새끼", "병신", "지랄", "꺼져", "닥쳐", "미친", "멍청", "바보", "죽어", "엿먹",
@@ -98,8 +98,11 @@ export async function GET() {
     return Response.json({
       state,
       attendanceRound,
-      capacity: CAPACITY,
-      counts: Object.fromEntries(countRows.map((row) => [Number(row.table_id), Math.min(Number(row.count), CAPACITY)])),
+      capacities: TABLE_CAPACITIES,
+      counts: Object.fromEntries(countRows.map((row) => {
+        const tableId = Number(row.table_id);
+        return [tableId, Math.min(Number(row.count), tableCapacity(tableId))];
+      })),
       feedback: feedbackRows.map((row) => ({
         ...row,
         name: filterNegativeWords(row.name, 30) || "익명",
@@ -137,10 +140,11 @@ export async function POST(request: Request) {
       if (!tableId) return Response.json({ error: "테이블 번호를 확인해 주세요." }, { status: 400 });
       if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참석 접수가 종료되었습니다." }, { status: 409 });
 
-      const startSlot = crypto.getRandomValues(new Uint32Array(1))[0] % CAPACITY;
+      const capacity = tableCapacity(tableId);
+      const startSlot = crypto.getRandomValues(new Uint32Array(1))[0] % capacity;
       let insertedRound: number | null = null;
-      for (let offset = 0; offset < CAPACITY; offset += 1) {
-        const slot = ((startSlot + offset) % CAPACITY) + 1;
+      for (let offset = 0; offset < capacity; offset += 1) {
+        const slot = ((startSlot + offset) % capacity) + 1;
         const rows = await sql`INSERT INTO attendance (table_id, round, slot)
           SELECT ${tableId}, CASE WHEN status = 'break' THEN current_round + 1 ELSE current_round END, ${slot}
           FROM event_state
@@ -157,14 +161,47 @@ export async function POST(request: Request) {
         return Response.json({ error }, { status: 409 });
       }
       const countRows = await sql`SELECT COUNT(*)::integer AS count FROM attendance WHERE round = ${insertedRound} AND table_id = ${tableId}`;
-      const count = Math.min(Number(countRows[0]?.count ?? 0), CAPACITY);
-      return Response.json({ ok: true, attendanceRound: insertedRound, count, remaining: CAPACITY - count });
+      const count = Math.min(Number(countRows[0]?.count ?? 0), capacity);
+      return Response.json({ ok: true, attendanceRound: insertedRound, count, remaining: capacity - count });
+    }
+
+    if (action === "leave") {
+      const tableId = validTableId(payload.tableId);
+      if (!tableId) return Response.json({ error: "테이블 번호를 확인해 주세요." }, { status: 400 });
+      if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참석 접수가 종료되었습니다." }, { status: 409 });
+
+      const rows = await sql`WITH current_state AS (
+          SELECT CASE WHEN status = 'break' THEN current_round + 1 ELSE current_round END AS attendance_round
+          FROM event_state
+          WHERE id = 1
+            AND status <> 'ended'
+            AND NOT (status = 'break' AND current_round >= 3)
+          FOR SHARE
+        ), picked AS (
+          SELECT attendance.id, attendance.round
+          FROM attendance
+          CROSS JOIN current_state
+          WHERE attendance.table_id = ${tableId}
+            AND attendance.round = current_state.attendance_round
+          ORDER BY attendance.created_at DESC, attendance.id DESC
+          LIMIT 1
+          FOR UPDATE OF attendance SKIP LOCKED
+        )
+        DELETE FROM attendance USING picked
+        WHERE attendance.id = picked.id
+        RETURNING attendance.round`;
+      const removedRound = rows[0]?.round ? Number(rows[0].round) : null;
+      if (!removedRound) return Response.json({ error: "이 테이블에서 뺄 참석 인원이 없습니다." }, { status: 409 });
+      const countRows = await sql`SELECT COUNT(*)::integer AS count FROM attendance WHERE round = ${removedRound} AND table_id = ${tableId}`;
+      const count = Number(countRows[0]?.count ?? 0);
+      return Response.json({ ok: true, attendanceRound: removedRound, count, remaining: tableCapacity(tableId) - count });
     }
 
     if (action === "feedback") {
       const message = filterNegativeWords(payload.message, 500);
-      const name = filterNegativeWords(payload.name, 30) || "익명";
+      const name = filterNegativeWords(payload.name, 30);
       if (!message) return Response.json({ error: "참여 소감을 입력해 주세요." }, { status: 400 });
+      if (!name) return Response.json({ error: "추첨을 위해 이름 또는 별명을 입력해 주세요." }, { status: 400 });
       await sql`INSERT INTO feedback (name, message) VALUES (${name}, ${message})`;
       return Response.json({ ok: true });
     }
@@ -217,14 +254,16 @@ export async function POST(request: Request) {
     }
 
     if (action === "raffle") {
+      const count = Number(payload.count);
+      if (!Number.isInteger(count) || count < 1 || count > 5) return Response.json({ error: "한 번에 1명부터 5명까지 추첨할 수 있습니다." }, { status: 400 });
       const rows = await sql`WITH picked AS (
-          SELECT id FROM feedback WHERE winner = false ORDER BY random() FOR UPDATE SKIP LOCKED LIMIT 1
+          SELECT id FROM feedback WHERE winner = false ORDER BY random() LIMIT ${count} FOR UPDATE SKIP LOCKED
         )
         UPDATE feedback SET winner = true FROM picked WHERE feedback.id = picked.id
         RETURNING feedback.id, feedback.name, feedback.message`;
-      const winner = rows[0];
-      if (!winner) return Response.json({ error: "추첨할 참여 소감이 없습니다." }, { status: 409 });
-      return Response.json({ ok: true, winner: { ...winner, name: filterNegativeWords(winner.name, 30), message: filterNegativeWords(winner.message, 500) } });
+      if (!rows.length) return Response.json({ error: "추첨할 참여 소감이 없습니다." }, { status: 409 });
+      const winners = rows.map((winner) => ({ ...winner, name: filterNegativeWords(winner.name, 30), message: filterNegativeWords(winner.message, 500) }));
+      return Response.json({ ok: true, winners });
     }
 
     return Response.json({ error: "지원하지 않는 요청입니다." }, { status: 400 });
