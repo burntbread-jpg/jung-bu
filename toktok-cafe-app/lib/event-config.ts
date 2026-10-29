@@ -17,6 +17,11 @@ export const TABLES = [
 ] as const;
 
 export const TABLE_CAPACITIES = Object.fromEntries(TABLES.map((table, index) => [index + 1, table.capacity])) as Record<number, number>;
+export const TABLE_CARD_LINES: Record<number, readonly string[]> = {
+  6: ["처음 만나는 디벗,", "기록하고 공유하며 성장하기"],
+  7: ["AI가 다 써주는데,", "굳이 내가 쓰기"],
+  15: ["유아도 교사도", "즐기는 디지털 놀이"],
+};
 export const TOTAL_PARTICIPANT_CAPACITY = TABLES.reduce((sum, table) => sum + table.capacity, 0);
 
 export function tableCapacity(tableId: number) {
