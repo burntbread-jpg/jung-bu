@@ -201,7 +201,7 @@ export async function POST(request: Request) {
       const message = filterNegativeWords(payload.message, 500);
       const name = filterNegativeWords(payload.name, 30);
       if (!message) return Response.json({ error: "참여 소감을 입력해 주세요." }, { status: 400 });
-      if (!name) return Response.json({ error: "추첨을 위해 이름 또는 별명을 입력해 주세요." }, { status: 400 });
+      if (!name) return Response.json({ error: "소감작성 및 추첨용 닉네임을 입력해 주세요." }, { status: 400 });
       await sql`INSERT INTO feedback (name, message) VALUES (${name}, ${message})`;
       return Response.json({ ok: true });
     }
