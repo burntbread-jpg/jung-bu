@@ -2,8 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Clock3, ExternalLink, Gift, LayoutGrid, Maximize2, MessageCircle, Minus, Minimize2, MonitorCog, RotateCcw, Smartphone, Users } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { BookOpen, Check, Clock3, ExternalLink, Gift, LayoutGrid, Maximize2, MessageCircle, Minus, Minimize2, MonitorCog, RotateCcw, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -67,7 +66,6 @@ export function EventApp({ operatorMode = false }: { operatorMode?: boolean }) {
   const [message, setMessage] = useState("");
   const [materialUrl, setMaterialUrl] = useState("");
   const [materialImageUrl, setMaterialImageUrl] = useState("");
-  const [feedbackUrl, setFeedbackUrl] = useState("/feedback");
   const [secondsLeft, setSecondsLeft] = useState(1200);
   const [winners, setWinners] = useState<Array<{ name: string; message: string }>>([]);
   const [raffleCount, setRaffleCount] = useState(1);
@@ -96,10 +94,6 @@ export function EventApp({ operatorMode = false }: { operatorMode?: boolean }) {
     const id = window.setInterval(() => void refresh(), 5000);
     return () => { window.clearTimeout(initial); window.clearInterval(id); };
   }, [refresh]);
-  useEffect(() => {
-    const id = window.setTimeout(() => setFeedbackUrl(`${window.location.origin}/feedback`), 0);
-    return () => window.clearTimeout(id);
-  }, []);
   useEffect(() => {
     const tick = () => {
       if (data.state.status !== "active" || !data.state.roundStartedAt) return setSecondsLeft(1200);
@@ -188,7 +182,6 @@ export function EventApp({ operatorMode = false }: { operatorMode?: boolean }) {
 
         <TabsContent value="feedback" className="content-panel feedback-layout">
           <section className="feedback-form"><p className="eyebrow">소통의 시간</p><h2>오늘의 배움을 나눠주세요</h2><Label htmlFor="name">작성자 닉네임(필수)</Label><Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="소감작성 및 추첨용 닉네임" maxLength={30} /><Label htmlFor="message">참여 소감</Label><Textarea id="message" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="기억에 남은 배움이나 동료에게 전하고 싶은 말을 적어주세요." maxLength={500} /><div className="form-footer"><span>{message.length}/500</span><Button disabled={busy || !message.trim() || !name.trim()} onClick={async () => { const result = await act("feedback", { name, message }, "소감이 공유되었습니다."); if (result) { setName(""); setMessage(""); } }}>소감 공유하기</Button></div></section>
-          <aside className="feedback-qr"><div><p className="eyebrow">MOBILE FEEDBACK</p><h2>휴대폰으로 바로 작성</h2><p>카메라로 QR을 비추면 소감 입력 전용 모바일 화면이 열립니다.</p></div><a href={feedbackUrl} aria-label="모바일 소감 작성 화면 열기"><QRCodeSVG value={feedbackUrl} size={188} level="H" marginSize={3} fgColor="#10213d" imageSettings={{ src: "/jungbu-office-symbol.png", height: 40, width: 40, excavate: true, opacity: 1 }} title="중부교육지원청 아이콘이 포함된 모바일 소감 작성 QR 코드" /><span><Smartphone />직접 열기</span></a></aside>
           <section className="feedback-wall"><div className="wall-heading"><div><p className="eyebrow">실시간 소감</p><h2>{data.feedback.length}개의 이야기</h2></div><MessageCircle /></div>{data.feedback.length === 0 ? <p className="empty-copy">첫 번째 소감을 남겨주세요.</p> : <div className="messages">{data.feedback.map((item) => <article key={item.id} className={item.winner ? "winner-message" : ""}><p>{item.message}</p><span>{item.name}{item.winner ? " · 당첨" : ""}</span></article>)}</div>}</section>
         </TabsContent>
 
