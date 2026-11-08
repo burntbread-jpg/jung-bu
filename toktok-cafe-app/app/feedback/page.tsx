@@ -58,16 +58,14 @@ export default function MobileFeedbackPage() {
           </div>
         ) : (
           <>
-            <p className="eyebrow">2026 수업 나눔의 달</p>
-            <h1>오늘의 배움을<br />남겨주세요</h1>
-            <p className="mobile-feedback-intro">새롭게 발견한 점이나 내 수업에 적용하고 싶은 생각을 천천히 적어주세요.</p>
+            <p className="eyebrow">소통의 시간</p>
+            <h1>오늘의 배움을<br />나눠주세요</h1>
             <div className="mobile-feedback-form">
-              <div className="mobile-feedback-field-heading"><Label htmlFor="mobile-message">참여 소감</Label><span>필수</span></div>
-              <p className="mobile-feedback-prompts">새롭게 알게 된 점 · 적용해 보고 싶은 점 · 함께 나누고 싶은 생각</p>
-              <Textarea id="mobile-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder={"오늘 가장 기억에 남은 장면은 무엇인가요?\n그 배움을 내 교실에서는 어떻게 이어가고 싶나요?"} maxLength={500} rows={10} />
-              <div className="mobile-feedback-count"><span>부적절한 표현은 자동으로 가려집니다.</span><strong>{message.length}/500</strong></div>
-              <Label htmlFor="mobile-name">작성자 닉네임 <span>필수</span></Label>
+              <Label htmlFor="mobile-name">작성자 닉네임(필수)</Label>
               <Input id="mobile-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="소감작성 및 추첨용 닉네임" maxLength={30} autoComplete="nickname" />
+              <Label htmlFor="mobile-message">참여 소감</Label>
+              <Textarea id="mobile-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="기억에 남은 배움이나 동료에게 전하고 싶은 말을 적어주세요." maxLength={500} rows={10} />
+              <div className="mobile-feedback-count"><span>부적절한 표현은 자동으로 가려집니다.</span><strong>{message.length}/500</strong></div>
               <Button disabled={busy || !message.trim() || !name.trim()} onClick={() => void submitFeedback()}>{busy ? "공유하는 중..." : <><Send />소감 공유하기</>}</Button>
               <p className="mobile-feedback-disclosure">작성한 닉네임과 소감은 행사 화면에 공유되며 추첨 대상에 포함됩니다.</p>
             </div>

@@ -6,7 +6,7 @@ export const TABLES = [
   { area: "수학 교구·디지털", title: "수학 수업에 생각 더하기", staff: 2, capacity: 7 },
   { area: "AI·에듀테크", title: "처음 만나는 디벗, 기록하고 공유하며 성장하기", staff: 1, capacity: 8 },
   { area: "AI·에듀테크", title: "AI가 다 써주는데, 굳이 내가 쓰기", staff: 1, capacity: 8 },
-  { area: "통합·특수교육", title: "다양함이 모이는 자리", staff: 1, capacity: 8 },
+  { area: "통합·특수교육", title: "다정함이 모이는 자리", staff: 1, capacity: 8 },
   { area: "생태전환교육", title: "다시 도전하는 나의 환경수업", staff: 1, capacity: 8 },
   { area: "인성교육", title: "실천으로 자라는 아이들, 사례로 나누는 인성교육", staff: 2, capacity: 7 },
   { area: "예술교육", title: "삶을 윤택하게 하는 예술교육", staff: 1, capacity: 8 },

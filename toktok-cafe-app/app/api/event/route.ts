@@ -138,7 +138,7 @@ export async function POST(request: Request) {
     if (action === "attend") {
       const tableId = validTableId(payload.tableId);
       if (!tableId) return Response.json({ error: "테이블 번호를 확인해 주세요." }, { status: 400 });
-      if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참석 접수가 종료되었습니다." }, { status: 409 });
+      if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참여 신청이 종료되었습니다." }, { status: 409 });
 
       const capacity = tableCapacity(tableId);
       const startSlot = crypto.getRandomValues(new Uint32Array(1))[0] % capacity;
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
       }
       if (!insertedRound) {
         const latest = await readState(sql);
-        const error = attendanceRoundFor(latest) ? "이 테이블은 정원이 찼습니다." : "모든 회차의 참석 접수가 종료되었습니다.";
+        const error = attendanceRoundFor(latest) ? "이 테이블은 정원이 찼습니다." : "모든 회차의 참여 신청이 종료되었습니다.";
         return Response.json({ error }, { status: 409 });
       }
       const countRows = await sql`SELECT COUNT(*)::integer AS count FROM attendance WHERE round = ${insertedRound} AND table_id = ${tableId}`;
@@ -168,7 +168,7 @@ export async function POST(request: Request) {
     if (action === "leave") {
       const tableId = validTableId(payload.tableId);
       if (!tableId) return Response.json({ error: "테이블 번호를 확인해 주세요." }, { status: 400 });
-      if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참석 접수가 종료되었습니다." }, { status: 409 });
+      if (!attendanceRoundFor(state)) return Response.json({ error: "모든 회차의 참여 신청이 종료되었습니다." }, { status: 409 });
 
       const rows = await sql`WITH current_state AS (
           SELECT CASE WHEN status = 'break' THEN current_round + 1 ELSE current_round END AS attendance_round
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
         WHERE attendance.id = picked.id
         RETURNING attendance.round`;
       const removedRound = rows[0]?.round ? Number(rows[0].round) : null;
-      if (!removedRound) return Response.json({ error: "이 테이블에서 뺄 참석 인원이 없습니다." }, { status: 409 });
+      if (!removedRound) return Response.json({ error: "이 테이블에서 취소할 참여 인원이 없습니다." }, { status: 409 });
       const countRows = await sql`SELECT COUNT(*)::integer AS count FROM attendance WHERE round = ${removedRound} AND table_id = ${tableId}`;
       const count = Number(countRows[0]?.count ?? 0);
       return Response.json({ ok: true, attendanceRound: removedRound, count, remaining: tableCapacity(tableId) - count });
