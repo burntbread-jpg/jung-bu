@@ -130,9 +130,22 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
 
-    const protectedActions = new Set(["start", "next", "pause", "end", "reset", "material", "raffle"]);
+    const protectedActions = new Set(["start", "next", "pause", "end", "reset", "material", "raffle", "export_feedback"]);
     if (protectedActions.has(action) && !(await validOperator(request))) {
       return Response.json({ error: "운영자 인증이 필요합니다." }, { status: 401 });
+    }
+
+    if (action === "export_feedback") {
+      const rows = await sql`SELECT id, name, message, winner, created_at FROM feedback ORDER BY id ASC`;
+      return Response.json({
+        ok: true,
+        count: rows.length,
+        feedback: rows.map((row) => ({
+          ...row,
+          name: filterNegativeWords(row.name, 30) || "익명",
+          message: filterNegativeWords(row.message, 500),
+        })),
+      });
     }
 
     if (action === "attend") {
