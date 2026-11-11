@@ -91,7 +91,7 @@ export function EventApp({ operatorMode = false }: { operatorMode?: boolean }) {
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refresh(), 0);
-    const id = window.setInterval(() => void refresh(), 5000);
+    const id = window.setInterval(() => void refresh(), 3000);
     return () => { window.clearTimeout(initial); window.clearInterval(id); };
   }, [refresh]);
   useEffect(() => {
@@ -165,7 +165,7 @@ export function EventApp({ operatorMode = false }: { operatorMode?: boolean }) {
         <TabsContent value="status" className="content-panel">
           <section className="summary-row"><div><span>{data.attendanceRound ? `${data.attendanceRound}회차 참여` : "참여 신청 종료"}</span><strong>{occupied}<small>명</small></strong></div><div><span>남은 좌석</span><strong>{TOTAL_PARTICIPANT_CAPACITY - occupied}<small>석</small></strong></div><div><span>운영 테이블</span><strong>15<small>개</small></strong></div></section>
           <button type="button" className="overview-timer" onClick={() => setTimerExpanded(true)} aria-label={`${data.state.currentRound}회차 타이머 전체 화면으로 확대`}><span><Clock3 />{data.state.currentRound}회차 · {statusLabel(data.state.status)}</span><strong>{data.state.status === "active" ? `${mm}:${ss}` : "20:00"}</strong><small>테이블 현황과 함께 확인 · 눌러서 크게 보기 <Maximize2 /></small></button>
-          <section className="section-heading"><h2>{data.attendanceRound ? `${data.attendanceRound}회차 주제별 테이블 실시간 참여 현황` : "참여 신청 종료"}</h2><span className={`live-pill ${connected ? "" : "offline"}`}><i />{connected ? "5초마다 반영" : "연결 끊김 · 다시 연결 중"}</span></section>
+          <section className="section-heading"><h2>{data.attendanceRound ? `${data.attendanceRound}회차 주제별 테이블 실시간 참여 현황` : "참여 신청 종료"}</h2><span className={`live-pill ${connected ? "" : "offline"}`}><i />{connected ? "3초마다 반영" : "연결 끊김 · 다시 연결 중"}</span></section>
           <div className="table-grid" role="region" aria-live="polite" aria-label="테이블별 잔여 좌석 현황">
             {TABLES.map((table, index) => { const id = index + 1; const count = Number(data.counts[id] ?? 0); const capacity = Number(data.capacities[id] ?? table.capacity); const remaining = Math.max(0, capacity - count); const titleLines = TABLE_CARD_LINES[id] ?? [table.title]; return <article className={`table-card ${remaining === 0 ? "full" : remaining <= 3 ? "nearly" : ""}`} aria-label={`${table.area}, ${table.title}, ${remaining}석 남음`} key={`${table.area}-${table.title}`}><div className="table-card-content"><div className="table-number">TABLE {String(id).padStart(2, "0")}</div><span className="table-area">{table.area}</span><h3>{titleLines.map((line) => <span key={line}>{line}</span>)}</h3><div className="seat-line"><strong>{remaining}</strong><span>자리 남음</span></div><Progress value={(count / capacity) * 100} aria-label={`${table.title} 좌석 사용률`} /><p>{count}/{capacity}명 참여</p></div></article>; })}
           </div>
